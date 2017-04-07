@@ -12,13 +12,23 @@ module RuboCop
 
         display_violations($stdout)
 
-        exit(1) if violations.any?
+        exit(1) if enabled_violations.any?
       end
 
       private
 
       def violations
         @violations ||= style_checker.violations
+      end
+
+      def enabled_violations
+        @enabled_violations ||= violations.map do |violation|
+          offenses = violation.offenses
+          if offenses.first.respond_to?(:disabled?)
+            violation.offenses = offenses.reject(&:disabled?)
+          end
+          violation unless violation.offenses.empty?
+        end.flatten.compact
       end
 
       def style_checker
@@ -46,12 +56,10 @@ module RuboCop
         formatter = RuboCop::Formatter::ClangStyleFormatter.new(io)
         formatter.started(nil)
 
-        violations.map do |violation|
-          offenses = violation.offenses
-          offenses = offenses.reject(&:disabled?) if offenses.first.respond_to?(:disabled?)
+        enabled_violations.map do |violation|
           formatter.file_finished(
             violation.filename,
-            offenses.compact.sort.freeze
+            violation.offenses.compact.sort.freeze
           )
         end
 
